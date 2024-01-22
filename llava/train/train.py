@@ -708,13 +708,13 @@ class LazySupervisedDataset(Dataset):
             data_dict['image'] = torch.zeros(3, crop_size['height'], crop_size['width'])
         return data_dict
 
-class LazyValidationSupervisedDataset(LazySupervisedDataset):
-    def __getitem__(self, i) -> Dict[str, torch.Tensor]:
-        #use parent class's getitem
-        data_dict = super().__getitem__(i)
-        #add tokenized label
-        data_dict['labels'] = self.tokenizer(str(self.list_data_dict[i]['labels']), return_tensors='pt')['input_ids'][0]
-        return data_dict
+# class LazyValidationSupervisedDataset(LazySupervisedDataset):
+#     def __getitem__(self, i) -> Dict[str, torch.Tensor]:
+#         #use parent class's getitem
+#         data_dict = super().__getitem__(i)
+#         #add tokenized label
+#         data_dict['labels'] = self.tokenizer(str(self.list_data_dict[i]['labels']), return_tensors='pt')['input_ids'][0]
+#         return data_dict
 
 
 
@@ -948,13 +948,12 @@ def train():
 
     data_module = make_supervised_data_module(tokenizer=tokenizer,
                                               data_args=data_args)
-    # now in format YYYY-MM-DD-hh-mm-ss
     now = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
     run_name = f"{model_args.model_name_or_path.split('/')[-1]}-{data_args.data_path.split('/')[-2]}-{now}"
+    training_args.run_name = run_name
     trainer = LLaVATrainer(model=model,
                     tokenizer=tokenizer,
                     args=training_args,
-                    run_name=run_name,
                     **data_module)
 
     if list(pathlib.Path(training_args.output_dir).glob("checkpoint-*")):
