@@ -21,6 +21,7 @@ import json
 import logging
 import pathlib
 from typing import Dict, Optional, Sequence, List
+from datetime import datetime
 
 import torch
 
@@ -707,6 +708,15 @@ class LazySupervisedDataset(Dataset):
             data_dict['image'] = torch.zeros(3, crop_size['height'], crop_size['width'])
         return data_dict
 
+class LazyValidationSupervisedDataset(LazySupervisedDataset):
+    def __getitem__(self, i) -> Dict[str, torch.Tensor]:
+        #use parent class's getitem
+        data_dict = super().__getitem__(i)
+        #add tokenized label
+        data_dict['labels'] = self.tokenizer(str(self.list_data_dict[i]['labels']), return_tensors='pt')['input_ids'][0]
+        return data_dict
+
+
 
 @dataclass
 class DataCollatorForSupervisedDataset(object):
@@ -742,19 +752,31 @@ class DataCollatorForSupervisedDataset(object):
         return batch
 
 
+
+# def compute_metrics(eval_pred):
+#     import numpy as np
+#     logits, labels_id = eval_pred
+#     predictions = np.argmax(logits, axis=-1)
+#     return {"test_accuracy": (predictions == labels_id).mean()}
+
 def make_supervised_data_module(tokenizer: transformers.PreTrainedTokenizer,
                                 data_args) -> Dict:
     """Make dataset and collator for supervised fine-tuning."""
     train_dataset = LazySupervisedDataset(tokenizer=tokenizer,
                                 data_path=data_args.data_path,
                                 data_args=data_args)
-    eval_dataset = LazySupervisedDataset(tokenizer=tokenizer,
+    if data_args.validation_data_path is None:
+        eval_dataset = None
+    else:
+        eval_dataset = LazySupervisedDataset(tokenizer=tokenizer,
                                 data_path=data_args.validation_data_path,
                                 data_args=data_args)
     data_collator = DataCollatorForSupervisedDataset(tokenizer=tokenizer)
     return dict(train_dataset=train_dataset,
                 eval_dataset=eval_dataset,
-                data_collator=data_collator)
+                data_collator=data_collator,
+                # compute_metrics=compute_metrics,
+                )   
 
 
 def train():
@@ -926,9 +948,13 @@ def train():
 
     data_module = make_supervised_data_module(tokenizer=tokenizer,
                                               data_args=data_args)
+    # now in format YYYY-MM-DD-hh-mm-ss
+    now = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+    run_name = f"{model_args.model_name_or_path.split('/')[-1]}-{data_args.data_path.split('/')[-2]}-{now}"
     trainer = LLaVATrainer(model=model,
                     tokenizer=tokenizer,
                     args=training_args,
+                    run_name=run_name,
                     **data_module)
 
     if list(pathlib.Path(training_args.output_dir).glob("checkpoint-*")):
